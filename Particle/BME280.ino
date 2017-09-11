@@ -10,11 +10,6 @@ void setup() {
     Particle.variable("humidity", sensor.humidity);
     Particle.variable("pressure", sensor.pressure);
 }
-int last_checked = 0;
 void loop() {
-    int now = millis();
-    if(now-last_checked > 1000){
-        last_checked = now;
-        sensor.takeReadings();
-    }
+    sensor.loop();
 }
