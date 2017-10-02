@@ -108,13 +108,13 @@ class BME280():
         self.pressure_compensation = []
         self.humidity_compensation = []
         self.get_parameters()
-        
+
     def get_parameters(self):
         parameters = self.smbus.read_i2c_block_data(self.address, 0x88, 25)
         self.temperature_compensation.append(parameters[0] + (parameters[1] << 8))
         self.temperature_compensation.append(parameters[2] + (parameters[3] << 8))
         self.temperature_compensation.append(parameters[4] + (parameters[5] << 8))
-        
+
         self.pressure_compensation.append(parameters[6] + (parameters[7] << 8))
         self.pressure_compensation.append(parameters[8] + (parameters[9] << 8))
         self.pressure_compensation.append(parameters[10] + (parameters[11] << 8))
@@ -124,8 +124,8 @@ class BME280():
         self.pressure_compensation.append(parameters[18] + (parameters[19] << 8))
         self.pressure_compensation.append(parameters[20] + (parameters[21] << 8))
         self.pressure_compensation.append(parameters[22] + (parameters[23] << 8))
-        
-        
+
+
         self.humidity_compensation.append(parameters[24])
         humidity_data = self.smbus.read_i2c_block_data(self.address, 0xE1, 8)
         self.humidity_compensation.append(humidity_data[0] + (humidity_data[1] << 8))
@@ -133,56 +133,50 @@ class BME280():
         self.humidity_compensation.append((humidity_data[3] << 4) + (humidity_data[4] & 0x0F))
         self.humidity_compensation.append((humidity_data[5] >> 4) + (humidity_data[6] >> 4))
         self.humidity_compensation.append(humidity_data[7])
-        
-        print self.temperature_compensation
-        print self.pressure_compensation
-        print self.humidity_compensation
-        
-        return self
-        
-    def take_readings(self, temperature_unit = 'c'):
+
+    def get_readings(self, temperature_unit = 'c'):
         data = self.smbus.read_i2c_block_data(self.address, BME280_READ_PRESS_MSB, 8)
-        
+
         press_var = (data[0] << 12) + (data[1] << 4) + (data[2] >> 4)
         temp_var = (data[3] << 12) + (data[4] << 4) + (data[5] >> 4)
         hum_var = (data[6] << 8) + data[7]
-        
+
         tvar1 = ((float(temp_var))/16384 - (float(self.temperature_compensation[0]))/1024) * (float(self.temperature_compensation[1]))
         tvar2 = ((float(temp_var))/131072 - (float(self.temperature_compensation[0]))/8192) * ((float(temp_var))/131072 - (float(self.temperature_compensation[0]))/8192) * (float(self.temperature_compensation[2]))
-        
+
         t_fine = int(tvar1+tvar2)
-        
+
         temperature_base = (tvar1+tvar2) / 5120
-        
+
         temperature = self.convert_temperature(temperature_unit, temperature_base)
-        
+
         pressure = 0
-        
+
         pvar1 = (t_fine/2) - 64000
         pvar2 = pvar1 * pvar1 * (float(self.pressure_compensation[5])) / 32768
         pvar2 = pvar2 + pvar1 * (float(self.pressure_compensation[4])) * 2
         pvar2 = (pvar2/4) + ((float(self.pressure_compensation[3])) * 65536)
         pvar1 = ((float(self.pressure_compensation[2])) * pvar1 * pvar1 / 524288 + (float(self.pressure_compensation[1])) * pvar1) / 524288
         pvar1 = (1 + pvar1 / 32768) * (float(self.pressure_compensation[0]))
-        
+
         if pvar1>0:
             pressure = 1048576 - float(press_var)
             pressure = (pressure - (pvar2 / 4096)) * 6250 / pvar1
             pvar1 = (float(self.pressure_compensation[8])) * pressure * pressure / 2147483648
             pvar2 = pressure * (float(self.pressure_compensation[7])) / 32768
             pressure = pressure + (pvar1 + pvar2 + (float(self.pressure_compensation[6]))) / 16
-            
+
         humidity = t_fine - 76800
         humidity = (hum_var - ((float(self.humidity_compensation[3])) * 64 + (float(self.humidity_compensation[4])) / 16384 * humidity)) * ((float(self.humidity_compensation[1])) / 65536 * (1 + (float(self.humidity_compensation[5])) / 67108864 * humidity * (1 + (float(self.humidity_compensation[2])) / 67108864 * humidity)));
         humidity = humidity * (1 - (float(self.humidity_compensation[0])) * humidity / 524288)
-        
+
         if humidity > 100 :
             humidity = 100
         elif humidity < 0:
             humidity = 0
-            
+
         return {'temperature': temperature, 'pressure': int(pressure), 'humidity': humidity}
-        
+
     def convert_temperature(self, temperature_unit, temperature_base):
         if temperature_unit.lower() == ("c"):
             return temperature_base
@@ -190,10 +184,10 @@ class BME280():
             return temperature_base + 273.15
         if temperature_unit.lower() == ("f"):
             return temperature_base * 1.8 + 32
-        
+
     def read_rate(self):
         rates = {0,1,2,4,8,16}
-        
+
 #         assume the max time
         tmeas = 1.25 + (2.3 * rates[(osrs_t >> 5)]) + (2.3 * rates[(osrs_p & 0x1C) >> 2] + .5) + (2.3 * rates[osrs_h] + 0.575)
 
@@ -205,4 +199,3 @@ class BME280():
             hz_modifier = {BME280_FILTER_COEF_2: 2000, BME280_FILTER_COEF_4: 5000, BME280_FILTER_COEF_8: 11000, BME280_FILTER_COEF_16: 22000}
             hz = hz_modifier[filter]/hz
             return 1/hz*1000
-        
